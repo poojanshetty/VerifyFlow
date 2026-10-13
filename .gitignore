@@ -1,0 +1,14 @@
+.venv/
+backend/venv/
+backend/.venv/
+backend/*.sqlite3
+backend/*.db
+.env
+.env.*
+!**/.env.example
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
