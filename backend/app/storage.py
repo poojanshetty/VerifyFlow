@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Iterator
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from dotenv import load_dotenv
 
+
+load_dotenv()
 
 DEFAULT_DATABASE = Path(__file__).resolve().parents[1] / "verifyflow.sqlite3"
 
