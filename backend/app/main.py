@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,9 +21,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "VERIFYFLOW_CORS_ORIGINS",
+        "http://localhost:8081,http://127.0.0.1:8081",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8081", "http://127.0.0.1:8081"],
+    allow_origins=allowed_origins,
     allow_methods=["GET", "POST", "PATCH", "PUT"],
     allow_headers=["Authorization", "Content-Type"],
 )

@@ -51,6 +51,8 @@ export VERIFYFLOW_ADMIN_PASSWORD="replace-with-a-private-password-of-12-or-more-
 
 For local development, SQLite is used by default. To connect to a hosted PostgreSQL database instead, set `DATABASE_URL` in the API server environment. Keep the connection URL, database password, encryption key, and token secret in the hosting provider's secret environment settings; never put them in the mobile app, source code, or GitHub. The Supabase publishable key is not used by this API.
 
+You may keep local-only settings in a root `.env` file (it is ignored by Git). `python-dotenv` loads it when the API starts. Use the URI connection string for `DATABASE_URL`; percent-encode special characters in its password. Do not copy production secrets into a shared `.env` file.
+
 Start the API on loopback only:
 
 ```sh
@@ -65,11 +67,15 @@ npm install
 EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://127.0.0.1:8001 npm run web
 ```
 
+To create the static website files locally, run `EXPO_PUBLIC_API_URL=https://your-api.onrender.com npm run build:web` from `mobile/`. Expo writes the site to `mobile/dist/`.
+
 Open `http://localhost:8081`. Sign in with the administrator credentials set above, then use **Manage users** to provision worker and bank-client accounts. A local database is created at `backend/verifyflow.sqlite3`; it is ignored by Git. Losing the encryption key means the encrypted records cannot be recovered.
 
 ## Render and Supabase demo deployment
 
 The API can be deployed as a Render Python web service using the repository root, build command `pip install -r backend/requirements.txt`, and start command `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`. Add `DATABASE_URL`, `VERIFYFLOW_ENCRYPTION_KEY`, `VERIFYFLOW_TOKEN_SECRET`, `VERIFYFLOW_ADMIN_USERNAME`, and `VERIFYFLOW_ADMIN_PASSWORD` as Render environment variables. Use Supabase's server-side PostgreSQL connection string for `DATABASE_URL` (prefer the pooler URI if the direct database host is not reachable from Render); require SSL. Do not use the publishable key as a database password.
+
+Create a separate Render **Static Site** for the mobile web UI, using the same private GitHub repository. Set its root directory to `mobile`, build command to `npm ci && npm run build:web`, and publish directory to `dist`. Set `EXPO_PUBLIC_API_URL` on the static site to the API's HTTPS URL; Expo embeds this value at build time. After Render gives the static site its URL, set `VERIFYFLOW_CORS_ORIGINS` on the API service to that exact HTTPS origin (for example, `https://verifyflow-ui.onrender.com`). Keep localhost origins too if you still need local web development. Then redeploy both services.
 
 After Render deploys, set the APK's `EXPO_PUBLIC_API_URL` to the Render HTTPS service URL. The existing local SQLite database and demo tickets are not automatically copied to Supabase. Render's free web service can sleep and has ephemeral local storage, so use PostgreSQL for demo persistence and synthetic records only. Free hosting is not production hosting.
 
