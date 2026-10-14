@@ -122,7 +122,10 @@ def initialize_database() -> None:
         admin_password = os.environ.get("VERIFYFLOW_ADMIN_PASSWORD")
         if not admin_username or not admin_password:
             raise RuntimeError("Set VERIFYFLOW_ADMIN_USERNAME and VERIFYFLOW_ADMIN_PASSWORD before starting the API.")
-        if connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is None:
+        admin = connection.execute(
+            "SELECT id, username, password_hash FROM users WHERE role = 'admin' ORDER BY id LIMIT 1"
+        ).fetchone()
+        if admin is None:
             import secrets
 
             admin_id = "admin-" + secrets.token_urlsafe(12)
@@ -131,6 +134,18 @@ def initialize_database() -> None:
                 "INSERT INTO users (id, username, password_hash, role, profile) VALUES (?, ?, ?, 'admin', ?)",
                 (admin_id, admin_username, hash_password(admin_password), profile),
             )
+        else:
+            username_in_use = connection.execute(
+                "SELECT 1 FROM users WHERE username = ? AND id != ?",
+                (admin_username, admin["id"]),
+            ).fetchone()
+            if username_in_use:
+                raise RuntimeError("VERIFYFLOW_ADMIN_USERNAME is already used by another account.")
+            if admin["username"] != admin_username or not verify_password(admin_password, admin["password_hash"]):
+                connection.execute(
+                    "UPDATE users SET username = ?, password_hash = ? WHERE id = ?",
+                    (admin_username, hash_password(admin_password), admin["id"]),
+                )
 
 
 def _cipher() -> AESGCM:

@@ -69,7 +69,7 @@ EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://127.0.0.1:8001 npm run web
 
 To create the static website files locally, run `EXPO_PUBLIC_API_URL=https://your-api.onrender.com npm run build:web` from `mobile/`. Expo writes the site to `mobile/dist/`.
 
-Open `http://localhost:8081`. Sign in with the administrator credentials set above, then use **Manage users** to provision worker and bank-client accounts. A local database is created at `backend/verifyflow.sqlite3`; it is ignored by Git. Losing the encryption key means the encrypted records cannot be recovered.
+Open `http://localhost:8081`. Sign in with the administrator credentials set above, then use **Manage users** to provision worker and bank-client accounts. The configured bootstrap admin username and password synchronize to the first admin record each time the API starts; on Render, changing these environment variables and redeploying resets that login. A local database is created at `backend/verifyflow.sqlite3`; it is ignored by Git. Losing the encryption key means the encrypted records cannot be recovered.
 
 ## Render and Supabase demo deployment
 
