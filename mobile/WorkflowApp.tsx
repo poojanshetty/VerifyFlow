@@ -318,11 +318,12 @@ function Dashboard({ user, cases, summary, onSelect, onNew, onAccounts, onSignOu
   onAccounts: () => void; onSignOut: () => void; onRefresh: () => void; error: string;
 }) {
   const title = user.role === 'admin' ? 'Operations overview' : user.role === 'worker' ? 'My verification queue' : 'Your applications';
+  const workspaceLabel = user.role === 'worker' ? 'EMPLOYEE' : user.role.replace('_', ' ').toUpperCase();
   const completedCases = cases.filter((item) => item.status === 'Approved' || item.status === 'Rejected');
   return <Shell user={user} onBack={onSignOut} backLabel="Sign out" onRefresh={onRefresh}>
-    <View style={styles.headingRow}><View style={styles.grow}><Text style={styles.kicker}>{user.role.replace('_', ' ').toUpperCase()} WORKSPACE</Text><Text style={styles.pageTitle}>{title}</Text><Text style={styles.muted}>Welcome, {user.username}</Text></View>
+    <View style={styles.headingRow}><View style={styles.grow}><Text style={styles.kicker}>{workspaceLabel} WORKSPACE</Text><Text style={styles.pageTitle}>{title}</Text><Text style={styles.muted}>Welcome, {user.username}</Text></View>
       {user.role === 'bank_client' && <Pressable style={styles.smallAction} onPress={onNew}><Text style={styles.smallActionText}>+ New case</Text></Pressable>}
-      {user.role === 'admin' && <Pressable style={styles.smallAction} onPress={onAccounts}><Text style={styles.smallActionText}>Manage users</Text></Pressable>}
+      {user.role === 'admin' && <Pressable style={styles.smallAction} onPress={onAccounts}><Text style={styles.smallActionText}>People & access</Text></Pressable>}
     </View>
     <View style={styles.metrics}>{[
       ['In review', summary.in_review, 'orange'], ['Verified', summary.verified, 'green'], ['Approved', summary.approved, 'teal'], ['Rejected', summary.rejected, 'coral'],
@@ -449,11 +450,11 @@ function AdminAccounts({ user, form, setForm, staff, onSave, onBack, busy, error
   }
 
   return <Shell user={user} onBack={onBack} backLabel="Operations overview">
-    <Text style={styles.kicker}>ADMINISTRATOR</Text><Text style={styles.pageTitle}>Manage accounts</Text>
-    <Text style={styles.formNotice}>Only administrators can create client and worker logins. Share initial credentials through an approved private channel.</Text>
+    <Text style={styles.kicker}>PEOPLE & ACCESS</Text><Text style={styles.pageTitle}>Manage your team</Text>
+    <Text style={styles.formNotice}>Create employee and bank-client access. Share initial credentials through an approved private channel.</Text>
     {credentials ? <Pressable style={styles.notice} onPress={onDismissCredentials}><Text style={styles.noticeTitle}>Account created - initial credentials</Text><Text style={styles.muted}>Username: {credentials.username}</Text><Text style={styles.muted}>Temporary password: {credentials.password}</Text><Text style={styles.muted}>Share privately, then dismiss this notice.</Text></Pressable> : null}
     <Section title="Create account">
-      <View style={styles.chipList}>{(['worker', 'bank_client'] as Role[]).map((role) => <Pressable key={role} onPress={() => set('role', role)} style={[styles.chip, form.role === role && styles.chipSelected]}><Text style={[styles.chipText, form.role === role && styles.chipTextSelected]}>{role === 'worker' ? 'Worker' : 'Bank client'}</Text></Pressable>)}</View>
+      <View style={styles.chipList}>{(['worker', 'bank_client'] as Role[]).map((role) => <Pressable key={role} onPress={() => set('role', role)} style={[styles.chip, form.role === role && styles.chipSelected]}><Text style={[styles.chipText, form.role === role && styles.chipTextSelected]}>{role === 'worker' ? 'Employee' : 'Bank client'}</Text></Pressable>)}</View>
       <Field label="Full name" value={form.name} onChangeText={(v) => set('name', v)} />
       <Field label="Username" value={form.username} onChangeText={(v) => set('username', v)} autoCapitalize="none" />
       <Field label="Initial password (minimum 12 characters)" value={form.password} onChangeText={(v) => set('password', v)} secureTextEntry />
@@ -471,8 +472,16 @@ function AdminAccounts({ user, form, setForm, staff, onSave, onBack, busy, error
       </> : null}
       {error ? <ErrorText>{error}</ErrorText> : null}<PrimaryButton label={busy ? 'Creating...' : 'Create account'} onPress={submitAccount} disabled={busy} />
     </Section>
-    <Section title={`Provisioned accounts (${staff.length})`}>
-      {staff.map((person) => <View key={person.id} style={styles.staffRow}><Text style={styles.staffName}>{person.name} - {person.username}</Text><Text style={styles.mutedSmall}>{person.role === 'worker' ? `Worker - daily hours: ${person.work_hours || 'Not set'}` : 'Bank client'}</Text></View>)}
+    <Section title={`Team accounts (${staff.length})`}>
+      {staff.map((person) => <View key={person.id} style={styles.staffRow}>
+        <View style={[styles.staffAvatar, person.role === 'worker' ? styles.employeeAvatar : styles.clientAvatar]}>
+          <Text style={styles.staffAvatarText}>{person.name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</Text>
+        </View>
+        <View style={styles.staffDetails}>
+          <Text style={styles.staffName}>{person.name}</Text>
+          <Text style={styles.mutedSmall}>{person.username}  ·  {person.role === 'worker' ? `Employee  ·  ${person.work_hours || 'Daily hours not set'}` : 'Bank client'}</Text>
+        </View>
+      </View>)}
     </Section>
   </Shell>;
 }
@@ -568,5 +577,5 @@ const styles = StyleSheet.create({
   chipList: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 11 }, chip: { borderRadius: 18, backgroundColor: '#EEF2EF', paddingHorizontal: 11, paddingVertical: 8 }, chipSelected: { backgroundColor: palette.teal }, chipText: { color: palette.ink, fontSize: 10, fontWeight: '700' }, chipTextSelected: { color: palette.white },
   scheduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, zIndex: 3 }, scheduleCell: { flexGrow: 1, flexBasis: '30%', minWidth: 110 },
   choiceWrap: { position: 'relative', gap: 5 }, choiceButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: palette.white }, choiceButtonText: { color: palette.ink, fontSize: 11, fontWeight: '700' }, choiceChevron: { color: palette.teal, fontSize: 12, fontWeight: '900' }, choiceMenu: { position: 'absolute', top: 63, left: 0, right: 0, zIndex: 10, elevation: 10, maxHeight: 180, borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: palette.white, shadowColor: '#172C2A', shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }, choiceScroll: { maxHeight: 178 }, choiceOption: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#EDF1EE' }, choiceOptionText: { color: palette.ink, fontSize: 11 },
-  staffRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EDF1EE' }, staffName: { color: palette.ink, fontSize: 12, fontWeight: '800', marginBottom: 3 }, error: { color: '#AE3C32', fontSize: 11, lineHeight: 16, marginVertical: 8 }, empty: { padding: 18, borderRadius: 10, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line },
+  staffRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11, borderTopWidth: 1, borderTopColor: '#EDF1EE' }, staffAvatar: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, employeeAvatar: { backgroundColor: '#DCEFE9' }, clientAvatar: { backgroundColor: '#F8E7D5' }, staffAvatarText: { color: palette.ink, fontSize: 11, fontWeight: '900' }, staffDetails: { flex: 1 }, staffName: { color: palette.ink, fontSize: 12, fontWeight: '800', marginBottom: 3 }, error: { color: '#AE3C32', fontSize: 11, lineHeight: 16, marginVertical: 8 }, empty: { padding: 18, borderRadius: 10, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line },
 });
