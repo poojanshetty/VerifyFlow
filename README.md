@@ -103,3 +103,10 @@ The focused backend workflow test can be run from the repository root:
 ```sh
 PYTHONPATH=. python3 -m pytest backend/tests/test_workflow.py -q
 ```
+
+
+This application is hosted on Render, with Supabase for the database.
+<b> Check out: https://verifyflow-1.onrender.com/ </b>
+The application is live for the client with free hosting and a free database service.
+
+Client requirements and budget are the main model of my business.
