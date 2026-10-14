@@ -127,7 +127,7 @@ def create_user(payload: UserCreate, admin: dict = Depends(current_user)):
                 (user_id, payload.username, hash_password(payload.password), payload.role, encrypt_json(profile, f"user:{user_id}:profile")),
             )
         except Exception as error:
-            if "UNIQUE constraint failed" in str(error):
+            if "UNIQUE constraint failed" in str(error) or getattr(error, "sqlstate", None) == "23505":
                 raise HTTPException(status_code=409, detail="Username is already in use") from error
             raise
         if payload.role == "worker":
@@ -169,7 +169,12 @@ def get_summary(user: dict = Depends(current_user)):
             scope = "1 = 1"
         params = () if user["role"] == "admin" else (user["id"],)
         counts = connection.execute(
-            f"SELECT COUNT(*) AS total, SUM(status IN ('Approved', 'Rejected')) AS verified, SUM(status = 'Approved') AS approved, SUM(status = 'Rejected') AS rejected, SUM(status = 'In review') AS in_review FROM cases WHERE {scope}",
+            f"""SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE status IN ('Approved', 'Rejected')) AS verified,
+                       COUNT(*) FILTER (WHERE status = 'Approved') AS approved,
+                       COUNT(*) FILTER (WHERE status = 'Rejected') AS rejected,
+                       COUNT(*) FILTER (WHERE status = 'In review') AS in_review
+                   FROM cases WHERE {scope}""",
             params,
         ).fetchone()
         return {key: counts[key] or 0 for key in ("total", "verified", "approved", "rejected", "in_review")}

@@ -18,7 +18,7 @@ The implemented intake form and applicant data model are currently loan-specific
 ## Architecture
 
 - `mobile/`: Expo / React Native app for Android and web preview.
-- `backend/`: FastAPI API with a local SQLite database.
+- `backend/`: FastAPI API with SQLite for local development and PostgreSQL when `DATABASE_URL` is configured.
 - Applicant profiles, worker profiles, document metadata and bytes, and review notes are encrypted at rest using AES-GCM. Passwords are salted and hashed.
 - Access is enforced by the API: bank clients are scoped to their own cases, workers to assigned cases, and only administrators can provision accounts or assign work.
 - The app does not call bank, Aadhaar, OCR, analytics, or push-notification providers. Notifications are in-app polling, not operating-system push notifications.
@@ -49,6 +49,8 @@ export VERIFYFLOW_ADMIN_USERNAME="admin"
 export VERIFYFLOW_ADMIN_PASSWORD="replace-with-a-private-password-of-12-or-more-characters"
 ```
 
+For local development, SQLite is used by default. To connect to a hosted PostgreSQL database instead, set `DATABASE_URL` in the API server environment. Keep the connection URL, database password, encryption key, and token secret in the hosting provider's secret environment settings; never put them in the mobile app, source code, or GitHub. The Supabase publishable key is not used by this API.
+
 Start the API on loopback only:
 
 ```sh
@@ -64,6 +66,12 @@ EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://127.0.0.1:8001 npm run web
 ```
 
 Open `http://localhost:8081`. Sign in with the administrator credentials set above, then use **Manage users** to provision worker and bank-client accounts. A local database is created at `backend/verifyflow.sqlite3`; it is ignored by Git. Losing the encryption key means the encrypted records cannot be recovered.
+
+## Render and Supabase demo deployment
+
+The API can be deployed as a Render Python web service using the repository root, build command `pip install -r backend/requirements.txt`, and start command `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`. Add `DATABASE_URL`, `VERIFYFLOW_ENCRYPTION_KEY`, `VERIFYFLOW_TOKEN_SECRET`, `VERIFYFLOW_ADMIN_USERNAME`, and `VERIFYFLOW_ADMIN_PASSWORD` as Render environment variables. Use Supabase's server-side PostgreSQL connection string for `DATABASE_URL` (prefer the pooler URI if the direct database host is not reachable from Render); require SSL. Do not use the publishable key as a database password.
+
+After Render deploys, set the APK's `EXPO_PUBLIC_API_URL` to the Render HTTPS service URL. The existing local SQLite database and demo tickets are not automatically copied to Supabase. Render's free web service can sleep and has ephemeral local storage, so use PostgreSQL for demo persistence and synthetic records only. Free hosting is not production hosting.
 
 ## Android APK
 

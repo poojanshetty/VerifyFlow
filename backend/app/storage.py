@@ -12,12 +12,43 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 DEFAULT_DATABASE = Path(__file__).resolve().parents[1] / "verifyflow.sqlite3"
 
 
+class PostgresConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def execute(self, query: str, parameters=()):
+        return self._connection.execute(query.replace("?", "%s"), parameters)
+
+    def executescript(self, script: str) -> None:
+        for statement in script.replace("BLOB", "BYTEA").split(";"):
+            if statement.strip():
+                self._connection.execute(statement)
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+    def close(self) -> None:
+        self._connection.close()
+
+
 @contextmanager
-def get_connection() -> Iterator[sqlite3.Connection]:
-    database_path = os.environ.get("VERIFYFLOW_DB_PATH", str(DEFAULT_DATABASE))
-    connection = sqlite3.connect(database_path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
+def get_connection() -> Iterator:
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        connection = PostgresConnection(
+            psycopg.connect(database_url, row_factory=dict_row, sslmode="require")
+        )
+    else:
+        database_path = os.environ.get("VERIFYFLOW_DB_PATH", str(DEFAULT_DATABASE))
+        connection = sqlite3.connect(database_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
     try:
         yield connection
         connection.commit()
@@ -66,11 +97,24 @@ def initialize_database() -> None:
             );
             """
         )
-        case_columns = {row["name"] for row in connection.execute("PRAGMA table_info(cases)")}
-        if "assigned_worker_id" not in case_columns:
-            connection.execute("ALTER TABLE cases ADD COLUMN assigned_worker_id TEXT REFERENCES users(id)")
-        if "bank_client_id" not in case_columns:
-            connection.execute("ALTER TABLE cases ADD COLUMN bank_client_id TEXT REFERENCES users(id)")
+        if isinstance(connection, PostgresConnection):
+            case_columns = {
+                row["name"]
+                for row in connection.execute(
+                    """SELECT column_name AS name FROM information_schema.columns
+                       WHERE table_schema = current_schema() AND table_name = 'cases'"""
+                )
+            }
+            if "assigned_worker_id" not in case_columns:
+                connection.execute("ALTER TABLE cases ADD COLUMN assigned_worker_id TEXT REFERENCES users(id)")
+            if "bank_client_id" not in case_columns:
+                connection.execute("ALTER TABLE cases ADD COLUMN bank_client_id TEXT REFERENCES users(id)")
+        else:
+            case_columns = {row["name"] for row in connection.execute("PRAGMA table_info(cases)")}
+            if "assigned_worker_id" not in case_columns:
+                connection.execute("ALTER TABLE cases ADD COLUMN assigned_worker_id TEXT REFERENCES users(id)")
+            if "bank_client_id" not in case_columns:
+                connection.execute("ALTER TABLE cases ADD COLUMN bank_client_id TEXT REFERENCES users(id)")
         admin_username = os.environ.get("VERIFYFLOW_ADMIN_USERNAME")
         admin_password = os.environ.get("VERIFYFLOW_ADMIN_PASSWORD")
         if not admin_username or not admin_password:
