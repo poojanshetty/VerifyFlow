@@ -135,7 +135,9 @@ def _cipher() -> AESGCM:
     if not encoded_key:
         raise RuntimeError("Set VERIFYFLOW_ENCRYPTION_KEY to a base64-encoded 32-byte key.")
     try:
-        key = base64.urlsafe_b64decode(encoded_key.encode("ascii"))
+        key_text = encoded_key.strip()
+        key_text += "=" * (-len(key_text) % 4)
+        key = base64.b64decode(key_text.encode("ascii"), altchars=b"-_", validate=True)
     except (ValueError, UnicodeEncodeError) as error:
         raise RuntimeError("VERIFYFLOW_ENCRYPTION_KEY must be valid URL-safe base64.") from error
     if len(key) != 32:
