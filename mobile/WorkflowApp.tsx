@@ -208,6 +208,10 @@ export default function WorkflowApp() {
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
 
+  const [selectedAccount, setSelectedAccount] = useState<StaffUser | null>(null);
+
+  const [resetPassword, setResetPassword] = useState('');
+
   const [error, setError] = useState('');
 
   const [busy, setBusy] = useState(false);
@@ -468,6 +472,95 @@ export default function WorkflowApp() {
 
 
 
+  async function saveAccountChanges() {
+
+    if (!token || !selectedAccount) return;
+
+    setBusy(true);
+
+    setError('');
+
+    try {
+
+      await apiRequest(`/api/users/${selectedAccount.id}`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          username: selectedAccount.username.trim(),
+          name: selectedAccount.name.trim(),
+          aadhaar_last4: selectedAccount.aadhaar_last4,
+          address: selectedAccount.address,
+          permanent_address: selectedAccount.permanent_address,
+          work_hours: selectedAccount.work_hours,
+        }),
+      });
+
+      await refreshNow();
+
+      setSelectedAccount(null);
+
+    } catch (reason) { setError((reason as Error).message); }
+
+    finally { setBusy(false); }
+
+  }
+
+
+
+  async function resetAccountPassword() {
+
+    if (!token || !selectedAccount || resetPassword.length < 12) {
+      Alert.alert('Password reset needs 12+ characters', 'Enter a new temporary password of at least 12 characters.');
+      return;
+    }
+
+    setBusy(true);
+
+    setError('');
+
+    try {
+
+      await apiRequest(`/api/users/${selectedAccount.id}/password`, token, { method: 'POST', body: JSON.stringify({ password: resetPassword }) });
+
+      setResetPassword('');
+
+      Alert.alert('Password updated', `A new temporary password is now active for ${selectedAccount.username}. Share it through an approved private channel.`);
+
+    } catch (reason) { setError((reason as Error).message); }
+
+    finally { setBusy(false); }
+
+  }
+
+
+
+  async function deleteAccount() {
+
+    if (!token || !selectedAccount) return;
+
+    const confirmed = typeof window === 'undefined' ? false : window.confirm(`Delete ${selectedAccount.name}'s account? Accounts linked to case history are protected by the API.`);
+
+    if (!confirmed) return;
+
+    setBusy(true);
+
+    setError('');
+
+    try {
+
+      await apiRequest(`/api/users/${selectedAccount.id}`, token, { method: 'DELETE' });
+
+      setSelectedAccount(null);
+
+      await refreshNow();
+
+    } catch (reason) { setError((reason as Error).message); }
+
+    finally { setBusy(false); }
+
+  }
+
+
+
   function openEdit(item: LoanCase) {
 
     setSelectedId(item.id);
@@ -512,7 +605,7 @@ export default function WorkflowApp() {
 
   if (user.role === 'bank_client' && (editing || selectedId === 'new')) {
 
-    return <ApplicationForm details={details} setDetails={setDetails} pickedFiles={pickedFiles} onPick={selectDocuments} onSave={saveApplication} onCancel={() => { setEditing(false); setSelectedId(null); setPickedFiles([]); }} busy={busy} error={error} editing={editing} />;
+    return <ApplicationForm details={details} setDetails={setDetails} pickedFiles={pickedFiles} onPick={selectDocuments} onSave={saveApplication} onCancel={() => { setEditing(false); setSelectedId(null); setPickedFiles([]); }} busy={busy} error={error} editing={editing} onRefresh={refreshNow} />;
 
   }
 
@@ -520,7 +613,7 @@ export default function WorkflowApp() {
 
   if (user.role === 'admin' && page === 'accounts') {
 
-    return <AdminAccounts user={user} form={userForm} setForm={setUserForm} staff={staff} onSave={saveUser} onBack={() => setPage('home')} busy={busy} error={error} credentials={createdCredentials} onDismissCredentials={() => setCreatedCredentials(null)} />;
+    return <AdminAccounts user={user} form={userForm} setForm={setUserForm} staff={staff} selectedAccount={selectedAccount} onSelectAccount={(account) => { setSelectedAccount(account); setResetPassword(''); }} onSaveSelected={saveAccountChanges} onResetPassword={resetAccountPassword} onDeleteAccount={deleteAccount} resetPassword={resetPassword} setResetPassword={setResetPassword} onSave={saveUser} onBack={() => setPage('home')} busy={busy} error={error} credentials={createdCredentials} onDismissCredentials={() => setCreatedCredentials(null)} onRefresh={refreshNow} />;
 
   }
 
@@ -555,6 +648,8 @@ export default function WorkflowApp() {
       busy={busy}
 
       error={error}
+
+      onRefresh={refreshNow}
 
     />;
 
@@ -666,7 +761,7 @@ function Dashboard({ user, cases, summary, onSelect, onNew, onAccounts, onHome, 
 
     <View style={styles.metrics}>{[
 
-      ['In review', summary.in_review, 'orange'], ['Verified', summary.verified, 'green'], ['Approved', summary.approved, 'teal'], ['Rejected', summary.rejected, 'coral'],
+      ['In review', summary.in_review, 'orange'], ['Approved', summary.approved, 'teal'], ['Rejected', summary.rejected, 'coral'],
 
     ].map(([label, value, color]) => <View style={styles.metric} key={String(label)}><Text style={[styles.metricValue, { color: palette[color as keyof typeof palette] }]}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>)}</View>
 
@@ -694,9 +789,9 @@ function Dashboard({ user, cases, summary, onSelect, onNew, onAccounts, onHome, 
 
     </View> : null}
 
-    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{user.role === 'worker' ? 'Assigned applications' : user.role === 'bank_client' ? 'Submitted applications' : 'All applications'}</Text><Text style={styles.mutedSmall}>{summary.total} total</Text></View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{user.role === 'worker' ? 'Assigned clients' : user.role === 'bank_client' ? 'Submitted applications' : 'All applications'}</Text><Text style={styles.mutedSmall}>{summary.total} total</Text></View>
 
-    {cases.length === 0 ? <EmptyState message={user.role === 'worker' ? 'No applications are assigned to you.' : 'No applications have been submitted yet.'} /> : cases.map((item) => <CaseRow key={item.id} item={item} onPress={() => onSelect(item)} />)}
+    {cases.length === 0 ? <EmptyState message={user.role === 'worker' ? 'No applications are assigned to you.' : 'No applications have been submitted yet.'} /> : cases.map((item) => <CaseRow key={item.id} item={item} showClientContact={user.role === 'worker'} onPress={() => onSelect(item)} />)}
 
   </Shell>;
 
@@ -704,19 +799,19 @@ function Dashboard({ user, cases, summary, onSelect, onNew, onAccounts, onHome, 
 
 
 
-function CaseDetail({ user, item, comment, setComment, staff, workerId, setWorkerId, onBack, onEdit, onAssign, onDecision, busy, error }: {
+function CaseDetail({ user, item, comment, setComment, staff, workerId, setWorkerId, onBack, onEdit, onAssign, onDecision, busy, error, onRefresh }: {
 
   user: User; item: LoanCase; comment: string; setComment: (value: string) => void; staff: StaffUser[]; workerId: string;
 
   setWorkerId: (value: string) => void; onBack: () => void; onEdit: () => void; onAssign: () => void;
 
-  onDecision: (status: 'Approved' | 'Rejected') => void; busy: boolean; error: string;
+  onDecision: (status: 'Approved' | 'Rejected') => void; busy: boolean; error: string; onRefresh: () => void;
 
 }) {
 
   const canEdit = user.role === 'bank_client' && item.status !== 'Approved' && item.status !== 'Rejected';
 
-  return <Shell user={user} activeSection="applications" onBack={onBack} backLabel="Applications">
+  return <Shell user={user} activeSection="applications" onBack={onBack} backLabel="Applications" onRefresh={onRefresh}>
 
     <View style={styles.headingRow}><View style={styles.grow}><Text style={styles.kicker}>{item.reference}</Text><Text style={styles.pageTitle}>{item.details.applicant}</Text><Text style={styles.muted}>Assigned to {item.assignee}</Text></View><StatusBadge status={item.status} /></View>
 
@@ -788,17 +883,17 @@ function CaseDetail({ user, item, comment, setComment, staff, workerId, setWorke
 
 
 
-function ApplicationForm({ details, setDetails, pickedFiles, onPick, onSave, onCancel, busy, error, editing }: {
+function ApplicationForm({ details, setDetails, pickedFiles, onPick, onSave, onCancel, busy, error, editing, onRefresh }: {
 
   details: ApplicantDetails; setDetails: (details: ApplicantDetails) => void; pickedFiles: PickedFile[];
 
-  onPick: () => void; onSave: () => void; onCancel: () => void; busy: boolean; error: string; editing: boolean;
+  onPick: () => void; onSave: () => void; onCancel: () => void; busy: boolean; error: string; editing: boolean; onRefresh: () => void;
 
 }) {
 
   const set = (field: keyof ApplicantDetails, value: string | number | boolean) => setDetails({ ...details, [field]: value });
 
-  return <Shell activeSection="applications" onBack={onCancel} backLabel="Applications">
+  return <Shell activeSection="applications" onBack={onCancel} backLabel="Applications" onRefresh={onRefresh}>
 
     <Text style={styles.kicker}>CLIENT - SECURE SUBMISSION</Text><Text style={styles.pageTitle}>{editing ? 'Update application' : 'New application'}</Text>
 
@@ -850,11 +945,11 @@ function ApplicationForm({ details, setDetails, pickedFiles, onPick, onSave, onC
 
 
 
-function AdminAccounts({ user, form, setForm, staff, onSave, onBack, busy, error, credentials, onDismissCredentials }: {
+function AdminAccounts({ user, form, setForm, staff, selectedAccount, onSelectAccount, onSaveSelected, onResetPassword, onDeleteAccount, resetPassword, setResetPassword, onSave, onBack, busy, error, credentials, onDismissCredentials, onRefresh }: {
 
-  user: User; form: typeof blankUser; setForm: (form: typeof blankUser) => void; staff: StaffUser[];
+  user: User; form: typeof blankUser; setForm: (form: typeof blankUser) => void; staff: StaffUser[]; selectedAccount: StaffUser | null; onSelectAccount: (account: StaffUser | null) => void; onSaveSelected: () => void; onResetPassword: () => void; onDeleteAccount: () => void; resetPassword: string; setResetPassword: (value: string) => void;
 
-  onSave: (workHours: string) => void; onBack: () => void; busy: boolean; error: string; credentials: { username: string; password: string } | null; onDismissCredentials: () => void;
+  onSave: (workHours: string) => void; onBack: () => void; busy: boolean; error: string; credentials: { username: string; password: string } | null; onDismissCredentials: () => void; onRefresh: () => void;
 
 }) {
 
@@ -912,9 +1007,9 @@ function AdminAccounts({ user, form, setForm, staff, onSave, onBack, busy, error
 
 
 
-  return <Shell user={user} activeSection="people" onBack={onBack} backLabel="Operations overview" onNavigateHome={onBack}>
+  return <Shell user={user} activeSection="people" onBack={onBack} backLabel="Operations overview" onNavigateHome={onBack} onRefresh={onRefresh}>
 
-    <Text style={styles.kicker}>PEOPLE & ACCESS</Text><Text style={styles.pageTitle}>Manage your team</Text>
+    <Text style={styles.kicker}>PEOPLE & ACCESS</Text><Text style={styles.pageTitle}>Manage accounts</Text>
 
     <Text style={styles.formNotice}>Create employee and client access. Share initial credentials through an approved private channel.</Text>
 
@@ -960,7 +1055,7 @@ function AdminAccounts({ user, form, setForm, staff, onSave, onBack, busy, error
 
     <Section title={`Team accounts (${staff.length})`}>
 
-      {staff.map((person) => <View key={person.id} style={styles.staffRow}>
+      {staff.map((person) => <Pressable key={person.id} style={[styles.staffRow, selectedAccount?.id === person.id && styles.staffRowSelected]} onPress={() => onSelectAccount(person)}>
 
         <View style={[styles.staffAvatar, person.role === 'worker' ? styles.employeeAvatar : styles.clientAvatar]}>
 
@@ -976,12 +1071,52 @@ function AdminAccounts({ user, form, setForm, staff, onSave, onBack, busy, error
 
         </View>
 
-      </View>)}
+        <Text style={styles.manageLink}>Manage</Text>
+
+      </Pressable>)}
 
     </Section>
 
+    {selectedAccount ? <AccountEditor account={selectedAccount} setAccount={onSelectAccount} resetPassword={resetPassword} setResetPassword={setResetPassword} onSave={onSaveSelected} onResetPassword={onResetPassword} onDelete={onDeleteAccount} busy={busy} /> : null}
+
   </Shell>;
 
+}
+
+
+
+function AccountEditor({ account, setAccount, resetPassword, setResetPassword, onSave, onResetPassword, onDelete, busy }: {
+  account: StaffUser;
+  setAccount: (account: StaffUser) => void;
+  resetPassword: string;
+  setResetPassword: (value: string) => void;
+  onSave: () => void;
+  onResetPassword: () => void;
+  onDelete: () => void;
+  busy: boolean;
+}) {
+  const set = (field: keyof StaffUser, value: string) => setAccount({ ...account, [field]: value });
+
+  return <View style={styles.accountEditor}>
+    <Text style={styles.sectionTitle}>Edit {account.role === 'worker' ? 'employee' : 'client'} account</Text>
+    <Field label="Full name" value={account.name} onChangeText={(value) => set('name', value)} />
+    <Field label="Username" value={account.username} onChangeText={(value) => set('username', value)} autoCapitalize="none" />
+    {account.role === 'worker' ? <>
+      <Field label="Aadhaar last four digits" value={account.aadhaar_last4} onChangeText={(value) => set('aadhaar_last4', value.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" />
+      <Field label="Current address" value={account.address} onChangeText={(value) => set('address', value)} />
+      <Field label="Permanent address" value={account.permanent_address} onChangeText={(value) => set('permanent_address', value)} />
+      <Field label="Daily hours / shift" value={account.work_hours} onChangeText={(value) => set('work_hours', value)} />
+    </> : null}
+    <PrimaryButton label={busy ? 'Saving...' : 'Save account details'} onPress={onSave} disabled={busy} />
+    <View style={styles.separator} />
+    <Text style={styles.fieldLabel}>Reset password</Text>
+    <Text style={styles.mutedSmall}>Enter a new temporary password of at least 12 characters. Share it privately with the account holder.</Text>
+    <Field label="New temporary password" value={resetPassword} onChangeText={setResetPassword} secureTextEntry />
+    <View style={styles.decisionButtons}>
+      <Pressable style={styles.rejectButton} onPress={onDelete} disabled={busy}><Text style={styles.rejectText}>Delete account</Text></Pressable>
+      <View style={styles.grow}><PrimaryButton label={busy ? 'Updating...' : 'Reset password'} onPress={onResetPassword} disabled={busy} /></View>
+    </View>
+  </View>;
 }
 
 
@@ -1002,7 +1137,7 @@ function Shell({ user, activeSection, children, onBack, backLabel, onRefresh, on
             </View>
             <Text style={styles.navCaption}>WORKSPACE</Text>
             <Pressable style={activeSection === 'home' ? styles.navItemActive : styles.navItem} onPress={onNavigateHome} disabled={!onNavigateHome}><Text style={styles.navIcon}>▦</Text><Text style={activeSection === 'home' ? styles.navTextActive : styles.navText}>Overview</Text></Pressable>
-            <Pressable style={activeSection === 'applications' ? styles.navItemActive : styles.navItem} onPress={onNavigateApplications} disabled={!onNavigateApplications}><Text style={styles.navIcon}>▤</Text><Text style={activeSection === 'applications' ? styles.navTextActive : styles.navText}>Applications</Text></Pressable>
+            {user?.role !== 'admin' ? <Pressable style={activeSection === 'applications' ? styles.navItemActive : styles.navItem} onPress={onNavigateApplications} disabled={!onNavigateApplications}><Text style={styles.navIcon}>▤</Text><Text style={activeSection === 'applications' ? styles.navTextActive : styles.navText}>Applications</Text></Pressable> : null}
             {user?.role === 'admin' ? <Pressable style={activeSection === 'people' ? styles.navItemActive : styles.navItem} onPress={onNavigatePeople} disabled={!onNavigatePeople}><Text style={styles.navIcon}>♙</Text><Text style={activeSection === 'people' ? styles.navTextActive : styles.navText}>People & access</Text></Pressable> : null}
             <View style={styles.sidebarSpacer} />
             <View style={styles.profileBlock}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{(user?.username || 'U').slice(0, 1).toUpperCase()}</Text></View><View style={styles.profileTextWrap}><Text style={styles.profileName}>{user?.username ?? 'Guest'}</Text><Text style={styles.profileRole}>{roleLabel}</Text></View></View>
@@ -1027,9 +1162,9 @@ function Shell({ user, activeSection, children, onBack, backLabel, onRefresh, on
   );
 }
 
-function CaseRow({ item, onPress }: { item: LoanCase; onPress: () => void }) {
+function CaseRow({ item, showClientContact = false, onPress }: { item: LoanCase; showClientContact?: boolean; onPress: () => void }) {
 
-  return <Pressable style={styles.caseCard} onPress={onPress}><View style={styles.rowBetween}><Text style={styles.kicker}>{item.reference}</Text><StatusBadge status={item.status} /></View><Text style={styles.caseName}>{item.details.applicant}</Text><Text style={styles.mutedSmall}>{item.assignee} - {item.documents.length} documents</Text>{item.verification_history.length ? <Text style={styles.historyComment}>{item.verification_history.length} verification update(s) - latest by {item.verified_by}</Text> : null}</Pressable>;
+  return <Pressable style={styles.caseCard} onPress={onPress}><View style={styles.rowBetween}><Text style={styles.kicker}>{item.reference}</Text><StatusBadge status={item.status} /></View><Text style={styles.caseName}>{item.details.applicant}</Text>{showClientContact ? <Text style={styles.contactText}>{item.details.phone || 'Phone not provided'}  ·  {item.details.email || 'Email not provided'}</Text> : null}<Text style={styles.mutedSmall}>{item.assignee} - {item.documents.length} documents</Text>{item.verification_history.length ? <Text style={styles.historyComment}>{item.verification_history.length} verification update(s) - latest by {item.verified_by}</Text> : null}</Pressable>;
 
 }
 
@@ -1179,7 +1314,7 @@ const styles = StyleSheet.create({
 
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }, sectionTitle: { color: palette.ink, fontSize: 14, fontWeight: '900', marginBottom: 10 },
 
-  caseCard: { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line, borderRadius: 14, padding: 18, marginBottom: 12 }, rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, caseName: { color: palette.ink, fontSize: 16, fontWeight: '800', marginTop: 8, marginBottom: 5 },
+  caseCard: { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line, borderRadius: 14, padding: 18, marginBottom: 12 }, rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, caseName: { color: palette.ink, fontSize: 16, fontWeight: '800', marginTop: 8, marginBottom: 5 }, contactText: { color: palette.ink, fontSize: 11, fontWeight: '700', marginBottom: 4 },
 
   badge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20 }, badgeText: { fontSize: 10, fontWeight: '800' },
 
@@ -1205,6 +1340,6 @@ const styles = StyleSheet.create({
 
   choiceWrap: { position: 'relative', gap: 5 }, choiceButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: palette.white }, choiceButtonText: { color: palette.ink, fontSize: 11, fontWeight: '700' }, choiceChevron: { color: palette.teal, fontSize: 12, fontWeight: '900' }, choiceMenu: { position: 'absolute', top: 63, left: 0, right: 0, zIndex: 10, elevation: 10, maxHeight: 180, borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: palette.white, shadowColor: '#172C2A', shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }, choiceScroll: { maxHeight: 178 }, choiceOption: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#EDF1EE' }, choiceOptionText: { color: palette.ink, fontSize: 11 },
 
-  staffRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11, borderTopWidth: 1, borderTopColor: '#EDF1EE' }, staffAvatar: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, employeeAvatar: { backgroundColor: '#DCEFE9' }, clientAvatar: { backgroundColor: '#F8E7D5' }, staffAvatarText: { color: palette.ink, fontSize: 11, fontWeight: '900' }, staffDetails: { flex: 1 }, staffName: { color: palette.ink, fontSize: 12, fontWeight: '800', marginBottom: 3 }, error: { color: '#AE3C32', fontSize: 11, lineHeight: 16, marginVertical: 8 }, empty: { padding: 18, borderRadius: 14, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line },
+  staffRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11, borderTopWidth: 1, borderTopColor: '#EDF1EE' }, staffRowSelected: { backgroundColor: '#E9F2EE', borderRadius: 10, paddingHorizontal: 8 }, staffAvatar: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, employeeAvatar: { backgroundColor: '#DCEFE9' }, clientAvatar: { backgroundColor: '#F8E7D5' }, staffAvatarText: { color: palette.ink, fontSize: 11, fontWeight: '900' }, staffDetails: { flex: 1 }, staffName: { color: palette.ink, fontSize: 12, fontWeight: '800', marginBottom: 3 }, manageLink: { color: palette.teal, fontSize: 10, fontWeight: '800' }, accountEditor: { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line, borderRadius: 11, padding: 14, marginBottom: 12 }, separator: { height: 1, backgroundColor: palette.line, marginVertical: 14 }, error: { color: '#AE3C32', fontSize: 11, lineHeight: 16, marginVertical: 8 }, empty: { padding: 18, borderRadius: 14, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line },
 
 });

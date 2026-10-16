@@ -51,5 +51,18 @@ class UserCreate(BaseModel):
     work_hours: str = Field(default="", max_length=80)
 
 
+class UserUpdate(BaseModel):
+    username: str = Field(min_length=3, max_length=120, pattern=r"^[a-zA-Z0-9_.@-]+$")
+    name: str = Field(min_length=1, max_length=120)
+    aadhaar_last4: str = Field(default="", pattern=r"^(\d{4})?$")
+    address: str = Field(default="", max_length=500)
+    permanent_address: str = Field(default="", max_length=500)
+    work_hours: str = Field(default="", max_length=80)
+
+
+class UserPasswordReset(BaseModel):
+    password: str = Field(min_length=12, max_length=256)
+
+
 class CaseUpdate(CaseCreate):
     pass

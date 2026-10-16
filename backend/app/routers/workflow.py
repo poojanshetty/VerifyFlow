@@ -6,7 +6,16 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from ..schemas.workflow import AssignmentCreate, CaseCreate, CaseUpdate, DecisionCreate, LoginRequest, UserCreate
+from ..schemas.workflow import (
+    AssignmentCreate,
+    CaseCreate,
+    CaseUpdate,
+    DecisionCreate,
+    LoginRequest,
+    UserCreate,
+    UserPasswordReset,
+    UserUpdate,
+)
 from ..security import create_access_token, current_user, require_role
 from ..storage import decrypt_bytes, decrypt_json, encrypt_bytes, encrypt_json, get_connection, hash_password, verify_password
 
@@ -144,6 +153,63 @@ def list_users(admin: dict = Depends(current_user)):
             {"id": row["id"], "username": row["username"], "role": row["role"], **decrypt_json(row["profile"], f"user:{row['id']}:profile")}
             for row in rows
         ]
+
+
+def _get_manageable_user(connection, user_id: str):
+    row = connection.execute("SELECT * FROM users WHERE id = ? AND role != 'admin'", (user_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return row
+
+
+def _user_result(row):
+    return {"id": row["id"], "username": row["username"], "role": row["role"], **decrypt_json(row["profile"], f"user:{row['id']}:profile")}
+
+
+@router.patch("/users/{user_id}")
+def update_user(user_id: str, payload: UserUpdate, admin: dict = Depends(current_user)):
+    require_role(admin, "admin")
+    profile = payload.model_dump(exclude={"username"})
+    with get_connection() as connection:
+        row = _get_manageable_user(connection, user_id)
+        existing_username = connection.execute("SELECT 1 FROM users WHERE username = ? AND id != ?", (payload.username, user_id)).fetchone()
+        if existing_username is not None:
+            raise HTTPException(status_code=409, detail="Username is already in use")
+        connection.execute(
+            "UPDATE users SET username = ?, profile = ? WHERE id = ?",
+            (payload.username, encrypt_json(profile, f"user:{user_id}:profile"), user_id),
+        )
+        if row["role"] == "worker":
+            connection.execute("UPDATE cases SET assignee = ? WHERE assigned_worker_id = ?", (payload.username, user_id))
+        updated = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _user_result(updated)
+
+
+@router.post("/users/{user_id}/password")
+def reset_user_password(user_id: str, payload: UserPasswordReset, admin: dict = Depends(current_user)):
+    require_role(admin, "admin")
+    with get_connection() as connection:
+        _get_manageable_user(connection, user_id)
+        connection.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(payload.password), user_id))
+    return {"message": "Password updated"}
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: str, admin: dict = Depends(current_user)):
+    require_role(admin, "admin")
+    with get_connection() as connection:
+        row = _get_manageable_user(connection, user_id)
+        linked_cases = connection.execute(
+            "SELECT 1 FROM cases WHERE bank_client_id = ? OR assigned_worker_id = ? LIMIT 1",
+            (user_id, user_id),
+        ).fetchone()
+        decision_history = connection.execute("SELECT 1 FROM decision_events WHERE actor_id = ? LIMIT 1", (user_id,)).fetchone()
+        if linked_cases is not None or decision_history is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="This account is linked to case history. Reassign or archive its cases before deleting the account.",
+            )
+        connection.execute("DELETE FROM users WHERE id = ?", (row["id"],))
 
 
 @router.get("/cases")

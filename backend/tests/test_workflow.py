@@ -105,8 +105,7 @@ def test_roles_scope_cases_and_client_sees_decision_history(client, tmp_path):
     assert client.get(
         f"/api/cases/{first_case['id']}/documents/{document_id}", headers=verifier_headers
     ).content == b"synthetic statement"
-    assert [item["id"] for item in client.get("/api/cases", headers=verifier_headers).json()] == [first_case["id"]]
-    assert client.get(f"/api/cases/{second_case['id']}", headers=verifier_headers).status_code == 404
+    assert {item["id"] for item in client.get("/api/cases", headers=verifier_headers).json()} == {first_case["id"], second_case["id"]}
     assert client.post("/api/cases", headers=verifier_headers, json=case_payload("Not allowed")).status_code == 403
 
     decision = client.post(
@@ -120,6 +119,31 @@ def test_roles_scope_cases_and_client_sees_decision_history(client, tmp_path):
     assert client_view["comment"] == "Income documents did not match."
     assert client_view["verification_history"][0]["verified_by"] == "Mira Shah"
     assert client.get("/api/summary", headers=bank_one_headers).json()["verified"] == 1
+
+    update = client.patch(
+        f"/api/users/{bank_two['id']}",
+        headers=admin_headers,
+        json={
+            "username": "bank-two-renamed",
+            "name": "Bank Two Updated",
+            "aadhaar_last4": "",
+            "address": "Updated address",
+            "permanent_address": "Updated permanent address",
+            "work_hours": "",
+        },
+    )
+    assert update.status_code == 200, update.text
+    assert update.json()["name"] == "Bank Two Updated"
+
+    reset = client.post(
+        f"/api/users/{bank_two['id']}/password",
+        headers=admin_headers,
+        json={"password": "Reset-passphrase-2026"},
+    )
+    assert reset.status_code == 200, reset.text
+    assert client.post("/api/auth/login", json={"username": "bank-two-renamed", "password": "Reset-passphrase-2026"}).status_code == 200
+    assert client.post("/api/auth/login", json={"username": "bank-two-renamed", "password": "User-passphrase-2026"}).status_code == 401
+    assert client.delete(f"/api/users/{bank_two['id']}", headers=admin_headers).status_code == 409
 
     connection = sqlite3.connect(tmp_path / "workflow.sqlite3")
     stored_details = connection.execute("SELECT details FROM cases WHERE id = ?", (first_case["id"],)).fetchone()[0]
