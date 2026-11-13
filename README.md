@@ -2,7 +2,7 @@
 
 VerifyFlow is a mobile-first case intake, assignment, and verification platform. Loan application review is its first workflow; the product is intended to expand to other structured review processes over time.
 
-> **Prototype warning:** Do not use this build for real Aadhaar, banking, or customer data. It has not had a production security, privacy, or regulatory review.
+> **Prototype warning:** Do not use this build for real Aadhaar, banking, or customer data. It has not had a production security, privacy, or regulatory review. This code is just added for my work overview; the real project has been built differently.
 
 ## Current features
 
